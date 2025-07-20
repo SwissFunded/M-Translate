@@ -9,7 +9,9 @@ const initializeWebSocket = (server) => {
       origin: [
         'http://localhost:3001', // Local development
         'https://m-translate-frontend.vercel.app', // Production frontend
-        'https://m-translate-frontend-*.vercel.app' // Preview deployments
+        'https://m-translate-frontend-d0nh1z3vj.vercel.app', // Previous deployment
+        'https://m-translate-frontend-hvddco4qf.vercel.app', // Current deployment
+        /^https:\/\/m-translate-frontend.*\.vercel\.app$/ // All preview deployments
       ],
       methods: ["GET", "POST"],
       credentials: true
@@ -49,8 +51,15 @@ const initializeWebSocket = (server) => {
     socket.on('start-transcription', () => {
       console.log('🎙️ Starting transcription for client:', socket.id);
       
+      // Check if client already has a connection
+      const existingConnection = clientConnections.get(socket.id);
+      if (existingConnection && existingConnection.deepgramConnection) {
+        console.log('⚠️ Client already has an active transcription connection');
+        socket.emit('transcription-error', { error: 'Transcription already active' });
+        return;
+      }
+      
       let deepgramConnection = null;
-      let audioDataCount = 0;
       
       try {
         console.log('🎙️ Creating Deepgram live connection...');
@@ -163,36 +172,40 @@ const initializeWebSocket = (server) => {
           
           let audioBuffer;
           
-          if (Array.isArray(audioData)) {
-            // Raw PCM data from Web Audio API as array
-            audioBuffer = Buffer.from(Int16Array.from(audioData).buffer);
-            console.log('🔄 Using raw PCM data:', audioBuffer.length, 'bytes');
+          // Handle different audio data formats
+          if (Buffer.isBuffer(audioData)) {
+            audioBuffer = audioData;
+            console.log('🔄 Using existing buffer:', audioBuffer.length, 'bytes');
+          } else if (Array.isArray(audioData)) {
+            // Convert array of numbers to 16-bit PCM buffer
+            const int16Array = new Int16Array(audioData);
+            audioBuffer = Buffer.from(int16Array.buffer);
+            console.log('🔄 Converted array to 16-bit PCM buffer:', audioBuffer.length, 'bytes');
           } else if (audioData instanceof ArrayBuffer) {
-            // ArrayBuffer from MediaRecorder
             audioBuffer = Buffer.from(audioData);
             console.log('🔄 Using ArrayBuffer directly:', audioBuffer.length, 'bytes');
-          } else if (audioData.buffer) {
-            // TypedArray with buffer property
+          } else if (audioData.buffer && audioData.buffer instanceof ArrayBuffer) {
             audioBuffer = Buffer.from(audioData.buffer);
             console.log('🔄 Using buffer from TypedArray:', audioBuffer.length, 'bytes');
-          } else if (audioData instanceof Array || audioData instanceof Uint8Array) {
-            audioBuffer = Buffer.from(audioData);
-            console.log('🔄 Converted array to buffer:', audioBuffer.length, 'bytes');
+          } else if (audioData instanceof Uint8Array || audioData instanceof Int16Array || audioData instanceof Float32Array) {
+            audioBuffer = Buffer.from(audioData.buffer);
+            console.log('🔄 Using TypedArray buffer:', audioBuffer.length, 'bytes');
           } else {
+            // Fallback: try to convert whatever we have to a buffer
             audioBuffer = Buffer.from(audioData);
-            console.log('🔄 Converted unknown type to buffer:', audioBuffer.length, 'bytes');
+            console.log('🔄 Fallback conversion to buffer:', audioBuffer.length, 'bytes');
           }
           
-          // Send audio to Deepgram
-          if (audioBuffer.length > 0) {
+          // Send audio to Deepgram if we have valid data
+          if (audioBuffer && audioBuffer.length > 0) {
             console.log('📡 Sending audio buffer to Deepgram:', audioBuffer.length, 'bytes');
             deepgramConnection.send(audioBuffer);
           } else {
-            console.log('⚠️ Empty audio buffer, skipping');
+            console.log('⚠️ Empty or invalid audio buffer, skipping');
           }
         } catch (error) {
           console.error('❌ Error processing audio data:', error);
-          socket.emit('transcription-error', { error: 'Failed to process audio' });
+          socket.emit('transcription-error', { error: 'Failed to process audio data' });
         }
       } else {
         if (!deepgramConnection) {

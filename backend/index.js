@@ -36,7 +36,9 @@ const corsOptions = {
   origin: [
     'http://localhost:3001', // Local development
     'https://m-translate-frontend.vercel.app', // Production frontend
-    'https://m-translate-frontend-*.vercel.app' // Preview deployments
+    'https://m-translate-frontend-d0nh1z3vj.vercel.app', // Previous deployment
+    'https://m-translate-frontend-hvddco4qf.vercel.app', // Current deployment
+    /^https:\/\/m-translate-frontend.*\.vercel\.app$/ // All preview deployments
   ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],

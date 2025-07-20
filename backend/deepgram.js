@@ -13,7 +13,7 @@ try {
 // Deepgram configuration for speech-to-text with raw PCM
 const getDeepgramConfig = () => ({
   model: 'nova-2',
-  language: 'en-US', // Temporarily back to English for testing
+  language: 'cs', // Czech language for transcription
   smart_format: true,
   punctuate: true,
   interim_results: true,
