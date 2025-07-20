@@ -37,7 +37,10 @@ const corsOptions = {
     'http://localhost:3001', // Local development
     'https://m-translate-frontend.vercel.app', // Production frontend
     'https://m-translate-frontend-d0nh1z3vj.vercel.app', // Previous deployment
-    'https://m-translate-frontend-hvddco4qf.vercel.app', // Current deployment
+    'https://m-translate-frontend-hvddco4qf.vercel.app', // Previous deployment
+    'https://m-translate-frontend-e4mb8soe6.vercel.app', // Previous deployment
+    'https://m-translate-frontend-fyjhhnwva.vercel.app', // Previous deployment
+    'https://m-translate-frontend-du07pf985.vercel.app', // Current deployment
     /^https:\/\/m-translate-frontend.*\.vercel\.app$/ // All preview deployments
   ],
   credentials: true,
