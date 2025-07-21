@@ -6,18 +6,28 @@ const { translateText } = require('./translation');
 const initializeWebSocket = (server) => {
   const io = new Server(server, {
     cors: {
-      origin: [
-        'http://localhost:3001', // Local development
-        'https://m-translate-frontend.vercel.app', // Production frontend
-        'https://m-translate-frontend-d0nh1z3vj.vercel.app', // Previous deployment
-        'https://m-translate-frontend-hvddco4qf.vercel.app', // Previous deployment
-        'https://m-translate-frontend-e4mb8soe6.vercel.app', // Previous deployment
-        'https://m-translate-frontend-fyjhhnwva.vercel.app', // Previous deployment
-        'https://m-translate-frontend-du07pf985.vercel.app', // Previous deployment
-        'https://m-translate-frontend-ift65dsxy.vercel.app', // Previous deployment
-        'https://m-translate-frontend-jo83wvq5w.vercel.app', // Current deployment
-        /^https:\/\/m-translate-frontend.*\.vercel\.app$/ // All preview deployments
-      ],
+      origin: function (origin, callback) {
+        // Allow requests with no origin
+        if (!origin) return callback(null, true);
+        
+        // Allow localhost for development
+        if (origin.includes('localhost:3001')) {
+          return callback(null, true);
+        }
+        
+        // Allow any m-translate-frontend on vercel.app domain
+        if (origin.match(/^https:\/\/m-translate-frontend.*\.vercel\.app$/)) {
+          return callback(null, true);
+        }
+        
+        // Allow the production domain
+        if (origin === 'https://m-translate-frontend.vercel.app') {
+          return callback(null, true);
+        }
+        
+        // Reject all other origins
+        return callback(new Error('Not allowed by CORS'), false);
+      },
       methods: ["GET", "POST"],
       credentials: true
     }
