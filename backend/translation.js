@@ -87,8 +87,8 @@ const validateDeepLKey = async () => {
   }
 };
 
-// Translate text from Czech to English with caching
-const translateText = async (text, targetLanguage = 'EN-US') => {
+// Translate text with caching (flexible source and target languages)
+const translateText = async (text, sourceLanguage = 'en', targetLanguage = 'es') => {
   if (!translator) {
     console.warn('⚠️ Translator not available');
     return null;
@@ -99,7 +99,7 @@ const translateText = async (text, targetLanguage = 'EN-US') => {
   }
   
   // Check cache first
-  const cacheKey = getCacheKey(text, targetLanguage);
+  const cacheKey = getCacheKey(text, `${sourceLanguage}-${targetLanguage}`);
   const cached = getFromCache(cacheKey);
   if (cached) {
     console.log(`💾 Cache hit for: "${text}"`);
@@ -111,12 +111,12 @@ const translateText = async (text, targetLanguage = 'EN-US') => {
   }
   
   try {
-    console.log(`🔄 Translating: "${text}" (cs → ${targetLanguage})`);
+    console.log(`🔄 Translating: "${text}" (${sourceLanguage} → ${targetLanguage})`);
     
     const result = await translator.translateText(
       text,
-      'cs', // Source language: Czech
-      targetLanguage, // Target language: English (US)
+      sourceLanguage, // Source language
+      targetLanguage, // Target language
       {
         preserveFormatting: true,
         formality: 'default'
@@ -129,7 +129,7 @@ const translateText = async (text, targetLanguage = 'EN-US') => {
     const translationResult = {
       originalText: text,
       translatedText: translatedText,
-      sourceLanguage: 'cs',
+      sourceLanguage: sourceLanguage,
       targetLanguage: targetLanguage,
       timestamp: new Date().toISOString(),
       fromCache: false
@@ -144,7 +144,7 @@ const translateText = async (text, targetLanguage = 'EN-US') => {
     return {
       originalText: text,
       translatedText: `[Translation Error: ${error.message}]`,
-      sourceLanguage: 'cs',
+      sourceLanguage: sourceLanguage,
       targetLanguage: targetLanguage,
       error: error.message,
       timestamp: new Date().toISOString(),

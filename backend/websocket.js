@@ -1,283 +1,190 @@
-const { Server } = require('socket.io');
-const { createLiveConnection, getDeepgramConfig } = require('./deepgram');
-const { translateText } = require('./translation');
+const googleSpeech = require('./google-speech');
+const translation = require('./translation');
 
-// Initialize WebSocket server
-const initializeWebSocket = (server) => {
-  const io = new Server(server, {
-    cors: {
-      origin: function (origin, callback) {
-        // Allow requests with no origin
-        if (!origin) return callback(null, true);
-        
-        // Allow localhost for development
-        if (origin.includes('localhost:3001')) {
-          return callback(null, true);
-        }
-        
-        // Allow any m-translate-frontend on vercel.app domain
-        if (origin.match(/^https:\/\/m-translate-frontend.*\.vercel\.app$/)) {
-          return callback(null, true);
-        }
-        
-        // Allow the production domain
-        if (origin === 'https://m-translate-frontend.vercel.app') {
-          return callback(null, true);
-        }
-        
-        // Reject all other origins
-        return callback(new Error('Not allowed by CORS'), false);
-      },
-      methods: ["GET", "POST"],
-      credentials: true
-    }
-  });
-
-  // Store connections per client
+module.exports = (io) => {
+  console.log('🔌 WebSocket server initialized');
+  
+  // Store client connections and their audio buffers
   const clientConnections = new Map();
+  
+  // Configure Socket.IO CORS
+  io.engine.on("connection_error", (err) => {
+    console.log('❌ WebSocket connection error:', err.req);      
+    console.log('❌ Error code:', err.code);        
+    console.log('❌ Error message:', err.message);  
+    console.log('❌ Error context:', err.context);  
+  });
 
   io.on('connection', (socket) => {
     console.log('🔗 Client connected:', socket.id);
-
-    // Validate Deepgram API key on connection
-    socket.on('validate-api-key', async () => {
-      console.log('🔑 Validating Deepgram API key...');
-      try {
-        // Test by creating a connection
-        const testConnection = createLiveConnection();
-        testConnection.on('open', () => {
-          console.log('🔑 Deepgram API key is valid');
-          testConnection.finish();
-          socket.emit('api-key-valid');
-        });
-        testConnection.on('error', (error) => {
-          console.error('❌ Deepgram API key validation failed:', error);
-          socket.emit('api-key-invalid', { error: error.message });
-        });
-      } catch (error) {
-        console.error('❌ Deepgram API key validation failed:', error);
-        socket.emit('api-key-invalid', { error: error.message });
-      }
-      
-      console.log('✅ Deepgram API key is valid');
+    console.log('🌐 Client origin:', socket.handshake.headers.origin);
+    
+    // Initialize client connection
+    clientConnections.set(socket.id, {
+      audioBuffer: Buffer.alloc(0),
+      isTranscribing: false,
+      lastTranscriptionTime: 0
     });
 
-    // Start transcription
+    // Handle transcription start
     socket.on('start-transcription', () => {
-      console.log('🎙️ Starting transcription for client:', socket.id);
+      console.log('🎙️ Start transcription request from:', socket.id);
       
-      // Check if client already has a connection
-      const existingConnection = clientConnections.get(socket.id);
-      if (existingConnection && existingConnection.deepgramConnection) {
-        console.log('⚠️ Client already has an active transcription connection');
-        socket.emit('transcription-error', { error: 'Transcription already active' });
-        return;
-      }
-      
-      let deepgramConnection = null;
-      
-      try {
-        console.log('🎙️ Creating Deepgram live connection...');
-        deepgramConnection = createLiveConnection();
+      const clientConnection = clientConnections.get(socket.id);
+      if (clientConnection) {
+        clientConnection.isTranscribing = true;
+        clientConnection.audioBuffer = Buffer.alloc(0);
+        clientConnection.lastTranscriptionTime = Date.now();
         
-        // Store connection for this client
-        clientConnections.set(socket.id, {
-          deepgramConnection,
-          audioDataCount: 0,
-          transcriptBuffer: []
-        });
-        
-        // Handle successful connection
-        deepgramConnection.on('open', () => {
-          console.log('✅ Deepgram connection opened successfully');
-        });
-
-        // Handle transcription results
-        deepgramConnection.on('results', async (result) => {
-          console.log('📝 Raw Deepgram result:', JSON.stringify(result, null, 2));
-          
-          if (result.channel && result.channel.alternatives && result.channel.alternatives.length > 0) {
-            const transcript = result.channel.alternatives[0].transcript;
-            const confidence = result.channel.alternatives[0].confidence;
-            const isFinal = result.is_final;
-            
-            console.log(`🎯 Transcript received: "${transcript}" (confidence: ${confidence}, final: ${isFinal})`);
-            
-            if (transcript && transcript.trim().length > 0) {
-              // Create transcription result
-              const transcriptionResult = {
-                transcript: transcript,
-                confidence: confidence,
-                isFinal: isFinal,
-                speaker: 'Speaker', // TODO: Add speaker diarization
-                timestamp: new Date().toISOString(),
-                translation: null // Will be populated if translation succeeds
-              };
-              
-              // Translate to English if this is a final result
-              if (isFinal && transcript.trim().length > 0) {
-                try {
-                  console.log('🌐 Translating final transcript to English...');
-                  const translationResult = await translateText(transcript, 'EN-US');
-                  
-                  if (translationResult && !translationResult.error) {
-                    transcriptionResult.translation = {
-                      text: translationResult.translatedText,
-                      sourceLanguage: 'cs',
-                      targetLanguage: 'en',
-                      timestamp: translationResult.timestamp
-                    };
-                    console.log(`✅ Translation: "${transcript}" → "${translationResult.translatedText}"`);
-                  } else {
-                    console.warn('⚠️ Translation failed:', translationResult?.error);
-                  }
-                } catch (error) {
-                  console.error('❌ Translation error:', error);
-                }
-              }
-              
-              console.log('📤 Sending result to frontend:', transcriptionResult);
-              socket.emit('transcription-result', transcriptionResult);
-              console.log('📝 Transcript result for client', socket.id, ':', transcriptionResult);
-            } else {
-              console.log('🔍 Empty transcript received');
-            }
-          }
-        });
-
-        // Handle errors
-        deepgramConnection.on('error', (error) => {
-          console.error('❌ Deepgram connection error:', error);
-          socket.emit('transcription-error', { error: error.message });
-        });
-
-        // Handle connection close
-        deepgramConnection.on('close', () => {
-          console.log('🔐 Deepgram connection closed');
-        });
-
-        // Handle metadata
-        deepgramConnection.on('metadata', (metadata) => {
-          console.log('📊 Deepgram metadata:', metadata);
-        });
-        
-        console.log('✅ Deepgram connection created, emitting transcription-started');
         socket.emit('transcription-started');
-        
-      } catch (error) {
-        console.error('❌ Failed to start transcription:', error);
-        socket.emit('transcription-error', { error: error.message });
+        console.log('✅ Transcription started for client:', socket.id);
       }
     });
 
     // Handle audio data
-    socket.on('audio-data', (audioData) => {
-      const clientConnection = clientConnections.get(socket.id);
-      if (!clientConnection) {
-        console.log('⚠️ No client connection found for audio data');
-        return;
+    socket.on('audio-data', async (audioData) => {
+      try {
+        const clientConnection = clientConnections.get(socket.id);
+        
+        if (!clientConnection || !clientConnection.isTranscribing) {
+          console.log('⚠️ Ignoring audio data - client not transcribing');
+          return;
+        }
+        
+        console.log('🎵 Received audio data:', audioData?.length, 'samples from client:', socket.id);
+
+      try {
+        // Convert array back to Buffer and append to existing buffer
+        const audioChunk = Buffer.from(new Int16Array(audioData).buffer);
+        clientConnection.audioBuffer = Buffer.concat([clientConnection.audioBuffer, audioChunk]);
+        
+        // Process audio in chunks for real-time transcription
+        const now = Date.now();
+        const timeSinceLastTranscription = now - clientConnection.lastTranscriptionTime;
+        const bufferSizeThreshold = 32000 * 1; // ~1 second of audio at 16kHz (much faster)
+        const minAudioDuration = 3000; // Wait at least 3 seconds for better transcription
+        
+        // Send for transcription if buffer is large enough and enough time has passed
+        if (clientConnection.audioBuffer.length >= bufferSizeThreshold && timeSinceLastTranscription >= minAudioDuration) {
+          await processBatchTranscription(socket, clientConnection);
+        }
+        
+      } catch (error) {
+        console.error('❌ Error processing audio data:', error);
+        socket.emit('transcription-error', { error: 'Audio processing failed' });
       }
       
-      const { deepgramConnection } = clientConnection;
-      clientConnection.audioDataCount++;
-      
-      if (deepgramConnection && audioData) {
-        try {
-          console.log(`🎵 Received audio data #${clientConnection.audioDataCount} from client:`, socket.id);
-          
-          let audioBuffer;
-          
-          // Handle different audio data formats
-          if (Buffer.isBuffer(audioData)) {
-            audioBuffer = audioData;
-            console.log('🔄 Using existing buffer:', audioBuffer.length, 'bytes');
-          } else if (Array.isArray(audioData)) {
-            // Convert array of numbers to 16-bit PCM buffer
-            const int16Array = new Int16Array(audioData);
-            audioBuffer = Buffer.from(int16Array.buffer);
-            console.log('🔄 Converted array to 16-bit PCM buffer:', audioBuffer.length, 'bytes');
-          } else if (audioData instanceof ArrayBuffer) {
-            audioBuffer = Buffer.from(audioData);
-            console.log('🔄 Using ArrayBuffer directly:', audioBuffer.length, 'bytes');
-          } else if (audioData.buffer && audioData.buffer instanceof ArrayBuffer) {
-            audioBuffer = Buffer.from(audioData.buffer);
-            console.log('🔄 Using buffer from TypedArray:', audioBuffer.length, 'bytes');
-          } else if (audioData instanceof Uint8Array || audioData instanceof Int16Array || audioData instanceof Float32Array) {
-            audioBuffer = Buffer.from(audioData.buffer);
-            console.log('🔄 Using TypedArray buffer:', audioBuffer.length, 'bytes');
-          } else {
-            // Fallback: try to convert whatever we have to a buffer
-            audioBuffer = Buffer.from(audioData);
-            console.log('🔄 Fallback conversion to buffer:', audioBuffer.length, 'bytes');
-          }
-          
-          // Send audio to Deepgram if we have valid data
-          if (audioBuffer && audioBuffer.length > 0) {
-            console.log('📡 Sending audio buffer to Deepgram:', audioBuffer.length, 'bytes');
-            deepgramConnection.send(audioBuffer);
-          } else {
-            console.log('⚠️ Empty or invalid audio buffer, skipping');
-          }
-        } catch (error) {
-          console.error('❌ Error processing audio data:', error);
-          socket.emit('transcription-error', { error: 'Failed to process audio data' });
-        }
-      } else {
-        if (!deepgramConnection) {
-          console.log('⚠️ No Deepgram connection available for audio data');
-        }
-        if (!audioData) {
-          console.log('⚠️ No audio data received');
-        }
+      } catch (outerError) {
+        console.error('❌ Critical error in audio-data handler:', outerError);
+        console.error('❌ Stack trace:', outerError.stack);
+        socket.emit('transcription-error', { error: 'Critical audio processing error' });
       }
     });
 
-    // Stop transcription
-    socket.on('stop-transcription', () => {
-      console.log('⏹️ Stopping transcription for client:', socket.id);
+    // Handle transcription stop
+    socket.on('stop-transcription', async () => {
+      console.log('⏹️ Stop transcription request from:', socket.id);
       
       const clientConnection = clientConnections.get(socket.id);
       if (clientConnection) {
-        console.log('📊 Total audio chunks processed:', clientConnection.audioDataCount);
+        clientConnection.isTranscribing = false;
         
-        if (clientConnection.deepgramConnection) {
-          console.log('🔐 Finishing Deepgram connection...');
+        // Process any remaining audio buffer
+        if (clientConnection.audioBuffer.length > 0) {
+          console.log('🎵 Processing final audio buffer:', clientConnection.audioBuffer.length, 'bytes');
           
-          // Send any buffered transcripts
-          if (clientConnection.transcriptBuffer && clientConnection.transcriptBuffer.length > 0) {
-            console.log('📝 Sending buffered transcripts:', clientConnection.transcriptBuffer.length);
-            clientConnection.transcriptBuffer.forEach(transcript => {
-              socket.emit('transcription-result', transcript);
-            });
-          } else {
-            console.log('⚠️ No transcripts in buffer to send');
+                     try {
+             // Use Google Speech for final buffer processing
+             const result = await googleSpeech.transcribeBuffer(clientConnection.audioBuffer, 'en-US');
+             
+             if (result && result.transcript && result.transcript.trim()) {
+              console.log('📝 Final transcript:', result.transcript);
+              
+              // Translate the final result (English to Spanish for testing)
+              let translatedText = '';
+              try {
+                translatedText = await translation.translateText(result.transcript, 'en', 'es');
+                console.log('🌍 Final translation (EN→ES):', translatedText);
+              } catch (translationError) {
+                console.error('❌ Final translation failed:', translationError);
+              }
+              
+              // Send final result
+              socket.emit('transcription-result', {
+                transcript: result.transcript,
+                translation: translatedText,
+                confidence: result.confidence || 0.9,
+                isFinal: true,
+                timestamp: new Date().toISOString(),
+                speaker: 'Speaker'
+              });
+            }
+          } catch (error) {
+            console.error('❌ Final transcription failed:', error);
+            socket.emit('transcription-error', { error: 'Final transcription failed' });
           }
-          
-          clientConnection.deepgramConnection.finish();
-          clientConnection.deepgramConnection = null;
         }
         
-        // Clean up client connection
-        clientConnections.delete(socket.id);
+        // Clear buffer
+        clientConnection.audioBuffer = Buffer.alloc(0);
+        console.log('✅ Transcription stopped for client:', socket.id);
       }
-      
-      socket.emit('transcription-stopped');
     });
 
     // Handle client disconnect
     socket.on('disconnect', () => {
-      console.log('🔌 Client disconnected:', socket.id);
-      
-      const clientConnection = clientConnections.get(socket.id);
-      if (clientConnection && clientConnection.deepgramConnection) {
-        clientConnection.deepgramConnection.finish();
-      }
+      console.log('👋 Client disconnected:', socket.id);
       clientConnections.delete(socket.id);
     });
   });
 
-  console.log('WebSocket server initialized');
-  return io;
-};
-
-module.exports = { initializeWebSocket }; 
+  // Process audio buffer for transcription
+  async function processBatchTranscription(socket, clientConnection) {
+    try {
+      console.log('🎵 Processing audio buffer:', clientConnection.audioBuffer.length, 'bytes');
+      console.log('🔄 Starting Google Speech transcription...');
+      
+      // Use Google Speech for transcription (highest accuracy)
+      const result = await googleSpeech.transcribeBuffer(clientConnection.audioBuffer, 'en-US');
+      console.log('✅ Google Speech transcription completed:', result?.transcript?.length || 0, 'characters');
+      
+      if (result && result.transcript && result.transcript.trim()) {
+        console.log('📝 Transcript received:', result.transcript);
+        
+        // Translate the text (English to Spanish for testing)
+        let translatedText = '';
+        try {
+          translatedText = await translation.translateText(result.transcript, 'en', 'es');
+          console.log('🌍 Translation (EN→ES):', translatedText);
+        } catch (translationError) {
+          console.error('❌ Translation failed:', translationError);
+        }
+        
+        // Send transcription result
+        socket.emit('transcription-result', {
+          transcript: result.transcript,
+          translation: translatedText,
+          confidence: result.confidence || 0.9,
+          isFinal: false, // This is an interim result
+          timestamp: new Date().toISOString(),
+          speaker: 'Speaker'
+        });
+        
+        // Update last transcription time
+        clientConnection.lastTranscriptionTime = Date.now();
+        
+        // Clear processed audio (keep only recent audio)
+        const keepBufferSize = 16000; // Keep ~0.5 seconds for context
+        if (clientConnection.audioBuffer.length > keepBufferSize) {
+          clientConnection.audioBuffer = clientConnection.audioBuffer.slice(-keepBufferSize);
+        }
+      }
+      
+    } catch (error) {
+      console.error('❌ Batch transcription failed:', error);
+      socket.emit('transcription-error', { 
+        error: `Transcription failed: ${error.message}` 
+      });
+    }
+  }
+}; 

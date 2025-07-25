@@ -1,16 +1,16 @@
 # M-Translate - Real-Time Speech Transcription & Translation
 
-A real-time speech-to-text transcription application that captures Czech speech and provides live transcriptions with translation capabilities.
+A real-time speech-to-text transcription application that captures English speech and provides live transcriptions with Spanish translation capabilities.
 
 ## 🎯 Features
 
 - **Real-time Audio Capture**: Live microphone recording with WebAudio API
-- **Speech-to-Text**: Czech language transcription using Deepgram API
+- **Speech-to-Text**: English language transcription using Google Speech-to-Text API
 - **Live Transcription Display**: Real-time subtitle display with confidence scores
 - **WebSocket Communication**: Low-latency audio streaming
-- **Translation Ready**: Built-in support for DeepL translation API
+- **Translation Ready**: Built-in support for DeepL translation API (English → Spanish)
 - **Modern UI**: React-based responsive frontend
-- **Cloud Deployment**: Ready for Vercel deployment
+- **Cloud Deployment**: Ready for Railway deployment
 
 ## 🏗️ Architecture
 
@@ -23,7 +23,7 @@ A real-time speech-to-text transcription application that captures Czech speech 
 ├── backend/              # Node.js backend server
 │   ├── index.js         # Express server entry point
 │   ├── websocket.js     # WebSocket handling
-│   ├── deepgram.js      # Deepgram API integration
+│   ├── google-speech.js # Google Speech API integration
 │   ├── translation.js   # DeepL translation service
 │   └── package.json
 └── README.md
@@ -35,7 +35,7 @@ A real-time speech-to-text transcription application that captures Czech speech 
 
 - Node.js 18+ 
 - npm or yarn
-- Deepgram API key
+- Google Speech-to-Text API key
 - (Optional) DeepL API key for translation
 
 ### Backend Setup
@@ -52,17 +52,16 @@ npm install
 
 3. Create environment file:
 ```bash
-cp .env.example .env
-```
-
-4. Add your API keys to `.env`:
-```env
+# Create backend/.env with:
+GOOGLE_API_KEY=your_google_speech_api_key_here
+OPENAI_API_KEY=your_openai_api_key_here
 DEEPGRAM_API_KEY=your_deepgram_api_key_here
 DEEPL_API_KEY=your_deepl_api_key_here  # Optional
-PORT=3000
+PORT=3001
+NODE_ENV=development
 ```
 
-5. Start the backend server:
+4. Start the backend server:
 ```bash
 npm start
 ```
@@ -79,91 +78,63 @@ cd frontend-web
 npm install
 ```
 
-3. Create environment file:
+3. Start the development server:
 ```bash
-echo "REACT_APP_BACKEND_URL=http://localhost:3000" > .env.local
+REACT_APP_BACKEND_URL="http://localhost:3001" npm start
 ```
 
-4. Start the development server:
-```bash
-npm start
-```
-
-The application will be available at `http://localhost:3001`
+The application will be available at `http://localhost:3000`
 
 ## 🌐 Deployment
 
-### Vercel Deployment
+### Railway Backend Deployment
 
-#### Backend Deployment
-
-1. Install Vercel CLI:
-```bash
-npm install -g vercel
-```
-
-2. Deploy backend:
-```bash
-cd backend
-vercel --prod
-```
-
-3. Set environment variables in Vercel dashboard:
-   - `DEEPGRAM_API_KEY`: Your Deepgram API key
+1. Create Railway account and new project
+2. Connect your GitHub repository
+3. Set environment variables in Railway dashboard:
+   - `GOOGLE_API_KEY`: Your Google Speech API key
+   - `OPENAI_API_KEY`: Your OpenAI API key (fallback)
+   - `DEEPGRAM_API_KEY`: Your Deepgram API key (fallback)
    - `DEEPL_API_KEY`: Your DeepL API key (optional)
+   - `PORT`: 3001
 
-#### Frontend Deployment
+### Frontend Deployment
 
-1. Update frontend environment variable:
+1. Update frontend environment for production:
 ```bash
 cd frontend-web
-echo "REACT_APP_BACKEND_URL=https://your-backend-url.vercel.app" > .env.production
+echo "REACT_APP_BACKEND_URL=https://your-railway-backend-url.railway.app" > .env.production
 ```
 
-2. Deploy frontend:
+2. Deploy to Vercel/Netlify:
 ```bash
-vercel --prod
-```
-
-### Environment Variables
-
-#### Backend (.env)
-```env
-DEEPGRAM_API_KEY=your_deepgram_api_key
-DEEPL_API_KEY=your_deepl_api_key
-PORT=3000
-NODE_ENV=production
-DATABASE_URL=your_database_url
-JWT_SECRET=your_jwt_secret
-STRIPE_SECRET_KEY=your_stripe_secret_key
-```
-
-#### Frontend (.env.production)
-```env
-REACT_APP_BACKEND_URL=https://your-backend-url.vercel.app
+npm run build
+# Deploy dist/ folder to your hosting provider
 ```
 
 ## 🔧 API Configuration
 
-### Deepgram Setup
+### Google Speech-to-Text Setup
 
-1. Create account at [deepgram.com](https://deepgram.com)
-2. Get API key from dashboard
-3. Configure for Czech language transcription
+1. Create project at [Google Cloud Console](https://console.cloud.google.com)
+2. Enable Speech-to-Text API
+3. Create service account and download JSON key
+4. Set API key in environment variables
 
 ### DeepL Setup (Optional)
 
 1. Create account at [deepl.com](https://www.deepl.com/pro-api)
-2. Get API key for translation services
-3. Used for Czech to English translation
+2. Get API key from dashboard
+3. Used for English to Spanish translation
 
 ## 📱 Usage
 
 1. **Access Application**: Open the deployed frontend URL
 2. **Grant Permissions**: Allow microphone access when prompted
 3. **Start Recording**: Click the microphone button to begin
-4. **View Transcription**: See real-time Czech speech transcription
-5. **Stop Recording**: Click stop button to end session
+4. **View Transcription**: See real-time English speech transcription
+5. **See Translation**: View Spanish translation (if DeepL key configured)
+6. **Stop Recording**: Click stop button to end session
 
 ## 🛠️ Technical Details
 
@@ -180,8 +151,8 @@ REACT_APP_BACKEND_URL=https://your-backend-url.vercel.app
 - `transcript-result`: Receive transcription results
 
 ### Supported Languages
-- **Primary**: Czech (cs-CZ)
-- **Translation**: English (en-US)
+- **Primary**: English (en-US)
+- **Translation**: Spanish (es-ES)
 
 ## 🔍 Troubleshooting
 
@@ -198,7 +169,7 @@ REACT_APP_BACKEND_URL=https://your-backend-url.vercel.app
    - Ensure WebSocket support
 
 3. **Empty Transcriptions**
-   - Verify Deepgram API key
+   - Verify Google Speech API key
    - Check audio format compatibility
    - Test with clear speech
 
@@ -208,6 +179,15 @@ Enable detailed logging by setting:
 ```env
 NODE_ENV=development
 ```
+
+## 🎉 Current Status
+
+✅ **English Speech Recognition**: Working with Google Speech API  
+✅ **Real-time WebSocket Communication**: Functional  
+✅ **Modern React Frontend**: Complete with dual subtitle display  
+✅ **Multiple STT Fallbacks**: Google Speech, OpenAI Whisper, Deepgram  
+🔄 **Spanish Translation**: Ready (requires DeepL API key)  
+🚀 **Deployment Ready**: Configured for Railway backend hosting  
 
 ## 🤝 Contributing
 
@@ -231,4 +211,4 @@ For issues and questions:
 
 ---
 
-**Note**: This application requires HTTPS in production for microphone access. 
+**Note**: This application requires HTTPS in production for microphone access. Local development works with HTTP on localhost. 
