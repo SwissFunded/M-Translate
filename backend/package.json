@@ -13,7 +13,7 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "@deepgram/sdk": "^4.9.1",
+    "@deepgram/sdk": "^3.13.0",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "deepl-node": "^1.19.0",
@@ -23,6 +23,7 @@
     "helmet": "^8.0.0",
     "jsonwebtoken": "^9.0.2",
     "multer": "^2.0.2",
+    "openai": "^5.10.2",
     "pg": "^8.13.1",
     "socket.io": "^4.8.1",
     "socket.io-client": "^4.8.1",

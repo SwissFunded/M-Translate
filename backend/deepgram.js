@@ -11,9 +11,9 @@ try {
 }
 
 // Deepgram configuration for speech-to-text with raw PCM
-const getDeepgramConfig = () => ({
-  model: 'nova-2',
-  language: 'cs', // Czech language for transcription
+const getDeepgramConfig = ({ model = 'nova-3', language = 'en' } = {}) => ({
+  model,
+  language,
   smart_format: true,
   punctuate: true,
   interim_results: true,
@@ -24,10 +24,10 @@ const getDeepgramConfig = () => ({
 });
 
 // Create live transcription connection
-const createLiveTranscription = (onTranscript, onError) => {
+const createLiveTranscription = (onTranscript, onError, { model = 'nova-3', language = 'en' } = {}) => {
   try {
     console.log('🎙️ Creating Deepgram live connection...');
-    const connection = deepgram.listen.live(getDeepgramConfig());
+    const connection = deepgram.listen.live(getDeepgramConfig({ model, language }));
     
     // Handle connection open
     connection.on('open', () => {
@@ -94,10 +94,10 @@ const createLiveTranscription = (onTranscript, onError) => {
 };
 
 // Create live connection (for direct use in websocket)
-const createLiveConnection = () => {
+const createLiveConnection = ({ model = 'nova-3', language = 'en' } = {}) => {
   try {
     console.log('🎙️ Creating Deepgram live connection...');
-    const connection = deepgram.listen.live(getDeepgramConfig());
+    const connection = deepgram.listen.live(getDeepgramConfig({ model, language }));
     return connection;
   } catch (error) {
     console.error('❌ Failed to create Deepgram live connection:', error);
@@ -106,13 +106,13 @@ const createLiveConnection = () => {
 };
 
 // Process pre-recorded audio file
-const transcribeFile = async (audioBuffer) => {
+const transcribeFile = async (audioBuffer, { model = 'nova-3', language = 'en' } = {}) => {
   try {
     console.log('🎵 Transcribing audio file...');
     const { result, error } = await deepgram.listen.prerecorded.transcribeFile(
       audioBuffer,
       {
-        ...getDeepgramConfig(),
+        ...getDeepgramConfig({ model, language }),
         interim_results: false // No interim results for file transcription
       }
     );
@@ -126,6 +126,42 @@ const transcribeFile = async (audioBuffer) => {
   } catch (error) {
     console.error('❌ File transcription error:', error);
     throw error;
+  }
+};
+
+// Transcribe a raw PCM buffer and return a normalized result
+const transcribeBuffer = async (audioBuffer, language = 'en', model = 'nova-3') => {
+  try {
+    const { result, error } = await deepgram.listen.prerecorded.transcribeFile(
+      audioBuffer,
+      {
+        ...getDeepgramConfig({ model, language }),
+        interim_results: false
+      }
+    );
+
+    if (error) throw error;
+
+    // Normalize Deepgram response to common shape
+    const alt = result?.results?.channels?.[0]?.alternatives?.[0];
+    const transcript = alt?.transcript || '';
+    const confidence = typeof alt?.confidence === 'number' ? alt.confidence : 0.9;
+
+    return {
+      transcript,
+      confidence,
+      language,
+      provider: 'deepgram-nova-3'
+    };
+  } catch (err) {
+    console.error('❌ Deepgram transcribeBuffer error:', err);
+    return {
+      transcript: '',
+      confidence: 0,
+      language,
+      error: err.message,
+      provider: 'deepgram-nova-3'
+    };
   }
 };
 
@@ -154,5 +190,6 @@ module.exports = {
   createLiveConnection,
   transcribeFile,
   validateApiKey,
-  getDeepgramConfig
+  getDeepgramConfig,
+  transcribeBuffer
 }; 
