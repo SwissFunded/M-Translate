@@ -7,35 +7,13 @@ const languages = require('./languages');
  * Available STT (Speech-to-Text) providers
  */
 const STT_PROVIDERS = {
-  GOOGLE_SPEECH: 'google-speech',
-    OPENAI_WHISPER: 'openai-whisper',
-    DEEPGRAM_NOVA3: 'deepgram-nova-3'
+  DEEPGRAM_NOVA3: 'deepgram-nova-3'
 };
 
 /**
  * Provider configurations and capabilities
  */
 const PROVIDER_CONFIG = {
-  [STT_PROVIDERS.GOOGLE_SPEECH]: {
-    name: 'Google Speech-to-Text',
-    description: 'Google Cloud Speech-to-Text API with real-time processing',
-    realtime: true,
-    confidence: true,
-    wordTimestamps: true,
-    speakerDiarization: true,
-    maxLanguages: 125,
-    icon: '🔍'
-  },
-  [STT_PROVIDERS.OPENAI_WHISPER]: {
-    name: 'OpenAI Whisper V3',
-    description: 'OpenAI Whisper with enhanced accuracy and multilingual support',
-    realtime: false,
-    confidence: false,
-    wordTimestamps: true,
-    speakerDiarization: false,
-    maxLanguages: 99,
-    icon: '🎵'
-    },
     [STT_PROVIDERS.DEEPGRAM_NOVA3]: {
       name: 'Deepgram Nova-3',
       description: 'Deepgram Nova-3 real-time and batch transcription',
@@ -51,17 +29,18 @@ const PROVIDER_CONFIG = {
 /**
  * Current default STT provider
  */
-let currentProvider = STT_PROVIDERS.GOOGLE_SPEECH;
+let currentProvider = STT_PROVIDERS.DEEPGRAM_NOVA3;
 
 /**
  * Set the current STT provider
  * @param {string} provider - Provider name from STT_PROVIDERS
  */
 const setSTTProvider = (provider) => {
-  if (!STT_PROVIDERS[provider.toUpperCase().replace('-', '_')]) {
+  const key = provider.toUpperCase().replace(/\W+/g, '_');
+  if (!STT_PROVIDERS[key]) {
     throw new Error(`Unknown STT provider: ${provider}`);
   }
-  currentProvider = STT_PROVIDERS[provider.toUpperCase().replace('-', '_')];
+  currentProvider = STT_PROVIDERS[key];
   console.log(`🎤 STT Provider switched to: ${PROVIDER_CONFIG[currentProvider].name}`);
 };
 
@@ -103,13 +82,6 @@ const transcribeBuffer = async (audioBuffer, language = 'en-US') => {
     console.log(`🎤 Using ${PROVIDER_CONFIG[currentProvider].name} for transcription`);
     
     switch (currentProvider) {
-      case STT_PROVIDERS.GOOGLE_SPEECH:
-        return await googleSpeech.transcribeBuffer(audioBuffer, language);
-        
-      case STT_PROVIDERS.OPENAI_WHISPER:
-        // Convert speech language code to Whisper format (remove region)
-        const whisperLang = languages.speechToTranslationLang(language);
-        return await whisper.transcribeBuffer(audioBuffer, whisperLang);
       case STT_PROVIDERS.DEEPGRAM_NOVA3:
         // Map language to Deepgram format (use translation lang, e.g., en-US -> en)
         const dgLang = languages.speechToTranslationLang(language);
@@ -144,11 +116,6 @@ const testConnection = async (provider = null) => {
     console.log(`🧪 Testing ${PROVIDER_CONFIG[targetProvider].name} connection...`);
     
     switch (targetProvider) {
-      case STT_PROVIDERS.GOOGLE_SPEECH:
-        return await googleSpeech.testConnection ? await googleSpeech.testConnection() : true;
-        
-      case STT_PROVIDERS.OPENAI_WHISPER:
-        return await whisper.testConnection();
       case STT_PROVIDERS.DEEPGRAM_NOVA3:
         return await deepgram.validateApiKey();
         
@@ -170,11 +137,6 @@ const getSupportedLanguages = (provider = null) => {
   const targetProvider = provider || currentProvider;
   
   switch (targetProvider) {
-    case STT_PROVIDERS.GOOGLE_SPEECH:
-      return Object.keys(languages.SPEECH_LANGUAGES);
-      
-    case STT_PROVIDERS.OPENAI_WHISPER:
-      return whisper.getSupportedLanguages();
     case STT_PROVIDERS.DEEPGRAM_NOVA3:
       // Assume same speech languages for simplicity; adjust if needed
       return Object.keys(languages.SPEECH_LANGUAGES);

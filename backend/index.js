@@ -105,7 +105,7 @@ app.get('/', (req, res) => {
       'Multi-language translation', 
       'Audio waveform visualization',
       'User authentication',
-      'Multiple STT providers (Google Speech, OpenAI Whisper, Deepgram Nova-3)',
+      'STT provider: Deepgram Nova-3',
       'Theme system (dark/light mode)',
       'User preferences management'
     ],
